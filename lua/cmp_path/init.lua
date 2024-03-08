@@ -1,13 +1,20 @@
 local cmp = require 'cmp'
 
 local NAME_REGEX = '\\%([^/\\\\:\\*?<>\'"`\\|]\\)'
-local PATH_REGEX = vim.regex(([[\%(\%(/PAT*[^/\\\\:\\*?<>\'"`\\| .~]\)\|\%(/\.\.\)\)*/\zePAT*$]]):gsub('PAT', NAME_REGEX))
+local PATH_REGEX = vim.regex(([[\%(\%([/\\]PAT*[^/\\\\:\\*?<>\'"`\\| .~]\)\|\%([/\\]\.\.\)\)*[/\\]\zePAT*$]]):gsub('PAT', NAME_REGEX))
 
 local source = {}
 
 local constants = {
   max_lines = 20,
 }
+
+local path_sep
+if vim.fn.has('win32') then
+  path_sep = '\\'
+else
+  path_sep = '/'
+end
 
 ---@class cmp_path.Option
 ---@field public trailing_slash boolean
@@ -28,7 +35,7 @@ source.new = function()
 end
 
 source.get_trigger_characters = function()
-  return { '/', '.' }
+    return { '/', '\\', '.' }
 end
 
 source.get_keyword_pattern = function(self, params)
@@ -78,23 +85,23 @@ source._dirname = function(self, params, option)
   if vim.api.nvim_get_mode().mode == 'c' then
     buf_dirname = vim.fn.getcwd()
   end
-  if prefix:match('%.%./$') then
+  if prefix:match('%.%.[/\\]$') then  -- TODO: .\cmp_path\..\ not working
     return vim.fn.resolve(buf_dirname .. '/../' .. dirname)
   end
-  if (prefix:match('%./$') or prefix:match('"$') or prefix:match('\'$')) then
+  if prefix:match('%.[/\\]$') or prefix:match('"$') or prefix:match('\'$') then
     return vim.fn.resolve(buf_dirname .. '/' .. dirname)
   end
-  if prefix:match('~/$') then
+  if prefix:match('~[/\\]$') then
     return vim.fn.resolve(vim.fn.expand('~') .. '/' .. dirname)
   end
-  local env_var_name = prefix:match('%$([%a_]+)/$')
+  local env_var_name = prefix:match('%$([%a_]+)[/\\]$')
   if env_var_name then
     local env_var_value = vim.fn.getenv(env_var_name)
     if env_var_value ~= vim.NIL then
       return vim.fn.resolve(env_var_value .. '/' .. dirname)
     end
   end
-  if prefix:match('/$') then
+  if prefix:match('[/\\]$') then  -- TODO: cmp_path/ not working
     local accept = true
     -- Ignore URL components
     accept = accept and not prefix:match('%a/$')
@@ -156,11 +163,11 @@ source._candidates = function(_, dirname, include_hidden, option, callback)
     if fs_type == 'directory' then
       item.kind = cmp.lsp.CompletionItemKind.Folder
       if option.label_trailing_slash then
-        item.label = name .. '/'
+        item.label = name .. path_sep
       else
         item.label = name
       end
-      item.insertText = name .. '/'
+      item.insertText = name .. path_sep
       if not option.trailing_slash then
         item.word = name
       end
